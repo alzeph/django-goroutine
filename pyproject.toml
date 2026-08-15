@@ -1,0 +1,92 @@
+[project]
+name = "django-goroutine"
+dynamic = ["version"]
+description = "Orchestrateur structuré de tâches concurrentes pour Django, inspiré du modèle de concurrence de Go — group()/cpu_map() au-dessus d'asyncio.TaskGroup, erreurs en pycatch.Result."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+authors = [{ name = "Cédric Hervé Youan", email = "hervecedricyouan@gmail.com" }]
+keywords = [
+    "django",
+    "asyncio",
+    "concurrency",
+    "goroutine",
+    "structured-concurrency",
+    "async",
+    "orm",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.1",
+    "Framework :: Django :: 5.2",
+    "Framework :: Django :: 6.0",
+    "Framework :: Django :: 6.1",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "django>=4.2",
+    "pycatch-safe>=1.0.0rc1",
+]
+
+[project.urls]
+Repository = "https://github.com/alzeph/django-goroutine"
+Changelog = "https://github.com/alzeph/django-goroutine/blob/main/CHANGELOG.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/django_goroutine/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/django_goroutine"]
+
+[dependency-groups]
+dev = [
+    "django-stubs>=5.1",
+    "mypy>=1.11",
+    "pre-commit>=3.8",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-django>=4.8",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+strict = true
+files = ["src"]
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
+
+[tool.coverage.run]
+source = ["django_goroutine"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "pragma: no cover"]
+fail_under = 100

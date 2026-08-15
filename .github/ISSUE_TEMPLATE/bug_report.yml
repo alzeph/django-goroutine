@@ -1,0 +1,28 @@
+name: Rapport de bug
+description: Signaler un comportement inattendu de django-goroutine
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Que se passe-t-il ? Que vous attendiez-vous à voir ?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction minimale
+      description: >-
+        Les fonctions décorées (@io/@db/@cpu) et le code d'appel via
+        group()/cpu_map() impliqués.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: django-goroutine, Django, Python
+    validations:
+      required: true
