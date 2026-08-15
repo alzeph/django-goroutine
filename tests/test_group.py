@@ -5,6 +5,7 @@ import contextvars
 import os
 import threading
 import time
+from concurrent.futures.process import BrokenProcessPool
 from unittest import mock
 
 import pytest
@@ -16,6 +17,7 @@ from django_goroutine.group import TaskHandle
 
 from .helpers import (
     bare_coroutine,
+    crash_cpu_worker,
     create_user_and_return_thread_name,
     current_process_id,
     fail_cpu,
@@ -24,9 +26,14 @@ from .helpers import (
     greet,
     noop_db,
     plain_sync,
+    raise_timeout_io,
     read_and_return_thread_name,
     sleep_cpu,
     sleep_io,
+    slow_cpu_with_short_timeout,
+    slow_db_with_short_timeout,
+    slow_io_with_short_timeout,
+    timestamped_sleep_db,
 )
 
 _ctx_var: contextvars.ContextVar[str] = contextvars.ContextVar(
@@ -195,3 +202,90 @@ async def test_exception_in_host_code_cancels_siblings_and_raises_exception_grou
         async with group() as g:
             g.go(sleep_io, 5, 0)
             raise ValueError("bug in the caller's own code, not in a dispatched task")
+
+
+# --- timeout par tâche --------------------------------------------------
+
+
+async def test_io_task_timeout_becomes_err():
+    async with group() as g:
+        handle = g.go(slow_io_with_short_timeout)
+    result = handle.result()
+    assert result.is_err()
+    assert isinstance(result.unwrap_err(), TimeoutError)
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_db_task_timeout_becomes_err():
+    async with group() as g:
+        handle = g.go(slow_db_with_short_timeout)
+    result = handle.result()
+    assert result.is_err()
+    assert isinstance(result.unwrap_err(), TimeoutError)
+
+
+async def test_cpu_task_timeout_becomes_err():
+    async with group() as g:
+        handle = g.go(slow_cpu_with_short_timeout)
+    result = handle.result()
+    assert result.is_err()
+    assert isinstance(result.unwrap_err(), TimeoutError)
+
+
+async def test_global_default_timeout_applies_without_explicit_decorator_timeout(
+    settings,
+):
+    settings.GOROUTINE = {"TASK_TIMEOUT": 0.02}
+    async with group() as g:
+        handle = g.go(sleep_io, 0.3, 1)
+    result = handle.result()
+    assert result.is_err()
+    assert isinstance(result.unwrap_err(), TimeoutError)
+
+
+async def test_user_raised_timeout_error_is_not_confused_with_our_own():
+    # Aucun timeout fixé (ni décorateur, ni GOROUTINE["TASK_TIMEOUT"]) :
+    # le TimeoutError levé par la fonction elle-même doit remonter tel
+    # quel, pas être réinterprété comme un dépassement de *notre* timeout.
+    async with group() as g:
+        handle = g.go(raise_timeout_io)
+    result = handle.result()
+    assert result.is_err()
+    err = result.unwrap_err()
+    assert isinstance(err, TimeoutError)
+    assert str(err) == "timeout métier, pas celui de django_goroutine"
+
+
+# --- backpressure ---------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_db_backpressure_serializes_beyond_max_pending(settings):
+    settings.GOROUTINE = {"DB_MAX_PENDING": 1}
+    async with group() as g:
+        handles = [g.go(timestamped_sleep_db, 0.15, i) for i in range(2)]
+    runs = sorted((h.result().unwrap() for h in handles), key=lambda r: r[0])
+    (first_start, first_end, _), (second_start, _, _) = runs
+    # DB_MAX_PENDING=1 : la deuxième tâche ne doit démarrer qu'une fois la
+    # première terminée, même si DB_POOL_SIZE permettrait davantage de
+    # threads simultanés — c'est le sémaphore de backpressure qui limite
+    # ici, pas la taille du pool.
+    assert second_start >= first_end - 0.02
+    assert first_start < first_end
+
+
+# --- auto-récupération sur pool @cpu cassé --------------------------------
+
+
+async def test_cpu_broken_process_pool_auto_recovers():
+    async with group() as g:
+        handle = g.go(crash_cpu_worker)
+    result = handle.result()
+    assert result.is_err()
+    assert isinstance(result.unwrap_err(), BrokenProcessPool)
+
+    # Le pool a été réinitialisé automatiquement : un appel suivant doit
+    # retrouver un pool sain plutôt que rester cassé indéfiniment.
+    async with group() as g2:
+        handle2 = g2.go(sleep_cpu, 0.0, 99)
+    assert handle2.result() == Ok(99)

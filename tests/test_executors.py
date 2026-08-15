@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 from django_goroutine.executors import (
     get_cpu_executor,
+    get_cpu_semaphore,
     get_db_executor,
+    get_db_semaphore,
+    reset_cpu_executor,
+    reset_db_executor,
     reset_executors,
 )
 
@@ -47,3 +52,56 @@ def test_setting_changed_resets_executors_via_conf(settings):
     second = get_db_executor()
     assert first is not second
     assert second._max_workers == 1
+
+
+def test_get_db_semaphore_is_a_singleton():
+    first = get_db_semaphore()
+    second = get_db_semaphore()
+    assert first is second
+    assert isinstance(first, asyncio.Semaphore)
+
+
+def test_get_cpu_semaphore_is_a_singleton():
+    first = get_cpu_semaphore()
+    second = get_cpu_semaphore()
+    assert first is second
+    assert isinstance(first, asyncio.Semaphore)
+
+
+def test_db_semaphore_defaults_to_four_times_pool_size():
+    # GOROUTINE["DB_POOL_SIZE"] = 4 dans tests/settings.py, DB_MAX_PENDING
+    # non fixé => 4 * 4.
+    assert get_db_semaphore()._value == 16
+
+
+def test_db_semaphore_respects_explicit_max_pending(settings):
+    settings.GOROUTINE = {"DB_MAX_PENDING": 3}
+    assert get_db_semaphore()._value == 3
+
+
+def test_reset_db_executor_does_not_touch_cpu_executor():
+    get_db_executor()
+    cpu_before = get_cpu_executor()
+    reset_db_executor()
+    assert get_cpu_executor() is cpu_before
+
+
+def test_reset_cpu_executor_does_not_touch_db_executor():
+    db_before = get_db_executor()
+    get_cpu_executor()
+    reset_cpu_executor()
+    assert get_db_executor() is db_before
+
+
+def test_reset_db_executor_also_resets_its_semaphore():
+    first = get_db_semaphore()
+    reset_db_executor()
+    second = get_db_semaphore()
+    assert first is not second
+
+
+def test_reset_cpu_executor_also_resets_its_semaphore():
+    first = get_cpu_semaphore()
+    reset_cpu_executor()
+    second = get_cpu_semaphore()
+    assert first is not second

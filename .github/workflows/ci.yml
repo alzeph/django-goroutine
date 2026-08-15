@@ -15,8 +15,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked --group dev
-      - run: uv run ruff check src tests
-      - run: uv run ruff format --check src tests
+      - run: uv run ruff check src tests examples
+      - run: uv run ruff format --check src tests examples
 
   typecheck:
     runs-on: ubuntu-latest
@@ -53,9 +53,34 @@ jobs:
       - name: Run tests against Django ${{ matrix.django-version }}
         run: uv run --with "django==${{ matrix.django-version }}.*" pytest
 
+  examples:
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      PYTHONPATH: examples
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --locked --group dev
+      - run: uv run python examples/manage.py migrate
+      - name: Vérifie que chaque vue du projet de démo répond 200
+        run: |
+          uv run python -c "
+          import django
+          django.setup()
+          from django.test import Client
+          client = Client()
+          for path in ['/', '/parallel/', '/cpu-map/', '/timeout/', '/errors/', '/backpressure/']:
+              response = client.get(path)
+              assert response.status_code == 200, (path, response.status_code, response.content)
+          print('toutes les vues de démonstration répondent 200')
+          "
+
   build:
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, test-django-versions]
+    needs: [lint, typecheck, test, test-django-versions, examples]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

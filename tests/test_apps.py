@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from unittest import mock
 
 from django.apps import apps
 
@@ -10,6 +11,12 @@ from django_goroutine import executors
 def test_ready_warms_the_db_pool():
     apps.get_app_config("django_goroutine").ready()
     assert isinstance(executors.get_db_executor(), ThreadPoolExecutor)
+
+
+def test_ready_registers_an_atexit_shutdown_hook():
+    with mock.patch("django_goroutine.apps.atexit.register") as register:
+        apps.get_app_config("django_goroutine").ready()
+    register.assert_called_once_with(executors.reset_executors)
 
 
 def test_ready_leaves_the_cpu_pool_lazy():

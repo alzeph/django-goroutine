@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from django_goroutine.decorators import cpu, db, goroutine_kind, io
+from django_goroutine.decorators import cpu, db, goroutine_kind, goroutine_timeout, io
 
 
 def _make_sync_function() -> Callable[[], int]:
@@ -67,3 +67,34 @@ def test_decorator_works_on_instance_method():
             return 42
 
     assert goroutine_kind(Service().fetch) == "db"
+
+
+def test_goroutine_timeout_none_by_default():
+    assert goroutine_timeout(db(_make_sync_function())) is None
+
+
+def test_io_accepts_timeout_via_call_syntax():
+    tagged = io(timeout=2.5)(_make_coroutine_function())
+    assert goroutine_kind(tagged) == "io"
+    assert goroutine_timeout(tagged) == 2.5
+
+
+def test_db_accepts_timeout_via_call_syntax():
+    tagged = db(timeout=1.0)(_make_sync_function())
+    assert goroutine_kind(tagged) == "db"
+    assert goroutine_timeout(tagged) == 1.0
+
+
+def test_cpu_accepts_timeout_via_call_syntax():
+    tagged = cpu(timeout=3.0)(_make_sync_function())
+    assert goroutine_kind(tagged) == "cpu"
+    assert goroutine_timeout(tagged) == 3.0
+
+
+def test_db_call_syntax_still_rejects_coroutine():
+    with pytest.raises(TypeError):
+        db(timeout=1.0)(_make_coroutine_function())  # type: ignore[arg-type]
+
+
+def test_goroutine_timeout_none_for_plain_function():
+    assert goroutine_timeout(_make_sync_function()) is None

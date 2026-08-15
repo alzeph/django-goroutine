@@ -16,6 +16,18 @@ DEFAULTS: dict[str, Any] = {
     "DB_POOL_SIZE": 10,
     # Taille du pool de process dédié aux fonctions @cpu et à cpu_map().
     "CPU_POOL_SIZE": os.cpu_count() or 1,
+    # Nombre max de tâches @db simultanément en file ou en cours avant
+    # qu'un nouvel appel n'attende qu'une place se libère (backpressure).
+    # None => DB_POOL_SIZE * 4, calculé au moment de la création du
+    # sémaphore plutôt que figé ici, pour rester cohérent si DB_POOL_SIZE
+    # est modifié sans toucher à ce réglage.
+    "DB_MAX_PENDING": None,
+    # Idem pour @cpu/cpu_map(). None => CPU_POOL_SIZE * 4.
+    "CPU_MAX_PENDING": None,
+    # Timeout par défaut (secondes) pour une tâche @io/@db/@cpu qui ne fixe
+    # pas explicitement le sien via @db(timeout=...). None => pas de
+    # timeout par défaut.
+    "TASK_TIMEOUT": None,
 }
 
 

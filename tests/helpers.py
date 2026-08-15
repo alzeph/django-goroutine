@@ -105,3 +105,63 @@ def fail_cpu() -> None:
 def plain_sync(value: int) -> int:
     """Ni `@db`, ni `@cpu` : `group().go()` doit refuser de la dispatcher."""
     return value
+
+
+@db
+def sleep_db(seconds: float, value: int) -> int:
+    time.sleep(seconds)
+    return value
+
+
+@db
+def timestamped_sleep_db(seconds: float, value: int) -> tuple[float, float, int]:
+    start = time.monotonic()
+    time.sleep(seconds)
+    end = time.monotonic()
+    return (start, end, value)
+
+
+@cpu
+def crash_cpu_worker() -> None:
+    """Tue durement son propre process — simule un worker qui crashe pour
+    tester l'auto-récupération sur `BrokenProcessPool`."""
+    os._exit(1)
+
+
+@io
+async def raise_timeout_io() -> None:
+    """Lève un `TimeoutError` qui n'a rien à voir avec le mécanisme de
+    timeout de django_goroutine (pas de `timeout=` fixé ici) — ne doit pas
+    être confondu avec un dépassement de *notre* timeout."""
+    raise TimeoutError("timeout métier, pas celui de django_goroutine")
+
+
+@io(timeout=0.02)
+async def slow_io_with_short_timeout() -> int:
+    import asyncio
+
+    await asyncio.sleep(0.3)
+    return 1
+
+
+@db(timeout=0.02)
+def slow_db_with_short_timeout() -> int:
+    time.sleep(0.3)
+    return 1
+
+
+@cpu(timeout=0.02)
+def slow_cpu_with_short_timeout() -> int:
+    time.sleep(0.3)
+    return 1
+
+
+def slow_square(n: int) -> int:
+    time.sleep(0.3)
+    return n * n
+
+
+def crash_cpu_worker_item(_: int) -> None:
+    """Équivalent de `crash_cpu_worker`, mais avec un paramètre : `cpu_map`
+    appelle toujours `fn(item)`, jamais `fn()`."""
+    os._exit(1)

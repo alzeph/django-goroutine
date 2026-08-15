@@ -110,6 +110,11 @@ async def profile_view(request, user_id):
 `fetch_user` et `fetch_avatar` tournent en parallèle : le temps de réponse
 de la vue tombe au temps de la plus lente des deux, pas à leur somme.
 
+Pour voir tout ça tourner sans rien configurer soi-même, voir
+[`examples/`](examples/) : un projet Django minimal avec des vues qui
+démontrent `group()`, `cpu_map()`, le timeout et la backpressure, lançable
+en une commande depuis ce dépôt.
+
 ### Héritage des appels internes
 
 Une fonction appelée *depuis* `fetch_user` (une aide interne, un second
@@ -141,6 +146,49 @@ b.result()  # Ok(b"...")
 `TaskHandle.result()` ne peut être lu qu'une fois le bloc `async with
 group()` refermé — l'appeler avant lève `RuntimeError`.
 
+### Timeout par tâche
+
+Un timeout par défaut ne peut pas se poser sur `Group.go()` lui-même (ses
+`*args`/`**kwargs` sont déjà réservés au transfert vers la fonction
+décorée), donc `@io`/`@db`/`@cpu` s'utilisent nus ou paramétrés :
+
+```python
+@db(timeout=2.0)
+def fetch_user(user_id: int) -> User:
+    return User.objects.get(pk=user_id)
+```
+
+Au-delà de `timeout` secondes, `TaskHandle.result()` devient
+`Err(TimeoutError(...))` — sans faire planter les tâches sœurs, comme
+n'importe quel autre échec. `GOROUTINE["TASK_TIMEOUT"]` fixe une valeur par
+défaut pour les tâches qui ne précisent pas la leur (`None` par défaut, donc
+pas de timeout du tout tant que rien n'est configuré). Une réserve
+importante à connaître : Python ne peut pas interrompre de force un thread
+ou un process déjà lancé sur la tâche — passé le timeout, l'appelant cesse
+d'attendre et récupère son `Err`, mais le thread/process continue
+d'exécuter la tâche en arrière-plan jusqu'à sa fin naturelle.
+
+### Backpressure
+
+Le nombre de tâches `@db`/`@cpu` simultanément en file ou en cours est
+borné (`GOROUTINE["DB_MAX_PENDING"]`/`CPU_MAX_PENDING`, par défaut 4× la
+taille du pool correspondant) : au-delà, un nouvel appel attend qu'une
+place se libère plutôt que de s'empiler sans limite dans la file interne de
+l'executor — c'est ce qui évite qu'un pic de charge fasse exploser la
+mémoire ou la latence au lieu d'échouer ou d'attendre proprement. Ça se
+combine naturellement avec `timeout`, qui borne alors l'attente d'une place
+libre *et* l'exécution elle-même.
+
+### Auto-récupération du pool `@cpu`
+
+Si un worker du pool `@cpu` crashe durement (segfault, `os._exit`...), le
+pool entier devient inutilisable (`BrokenProcessPool`) tant qu'il n'est pas
+recréé. `django-goroutine` détecte ce cas et réinitialise le pool
+automatiquement : l'appel en cours échoue (`Err(BrokenProcessPool(...))`,
+pas de retry automatique — rejouer une fonction qui a peut-être déjà eu des
+effets de bord serait pire), mais les appels suivants retrouvent un pool
+sain plutôt que de rester cassés indéfiniment.
+
 ## Paralléliser un calcul CPU-bound (`cpu_map`)
 
 `@cpu` sur `group().go()` ne fait gagner du temps que sur du travail déjà
@@ -166,9 +214,13 @@ async def batch_resize_view(request, images):
 
 `fn` doit être une fonction sync CPU-bound, importable au niveau module
 (contrainte de `pickle` du `ProcessPoolExecutor` sous-jacent) — jamais une
-lambda, une closure, ou une méthode d'instance liée. Un échec sur un élément
-ne fait pas échouer les autres : chaque résultat est un `Result`
-indépendant, dans l'ordre d'entrée.
+lambda, une closure, ou une méthode d'instance liée. Un échec sur un
+élément, y compris un dépassement de `timeout` (secondes, optionnel,
+appliqué individuellement à chaque élément — `cpu_map(fn, items,
+timeout=5.0)`) ou un pool `@cpu` cassé (auto-réinitialisé), ne fait pas
+échouer les autres : chaque résultat est un `Result` indépendant, dans
+l'ordre d'entrée. `cpu_map()` partage le même sémaphore de backpressure que
+les tâches `@cpu` de `group()` — les deux se disputent la même ressource.
 
 Le GIL empêche deux threads d'exécuter du bytecode Python en parallèle : si
 votre calcul lourd passe déjà par une bibliothèque C qui relâche le GIL
@@ -182,8 +234,38 @@ CPU-bound, via des process séparés.
 GOROUTINE = {
     "DB_POOL_SIZE": 10,                # taille du pool de threads @db
     "CPU_POOL_SIZE": os.cpu_count(),   # taille du pool de process @cpu
+    "DB_MAX_PENDING": None,            # backpressure @db ; None => DB_POOL_SIZE * 4
+    "CPU_MAX_PENDING": None,           # backpressure @cpu/cpu_map ; None => CPU_POOL_SIZE * 4
+    "TASK_TIMEOUT": None,              # timeout par défaut (secondes) ; None => aucun
 }
 ```
+
+## Journalisation
+
+Toutes les tâches et événements de pool passent par le logger Python
+`"django_goroutine"`, à brancher comme n'importe quel autre logger Django :
+
+```python
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "django_goroutine": {"handlers": ["console"], "level": "INFO"},
+    },
+}
+```
+
+| Niveau | Émis pour |
+|---|---|
+| `DEBUG` | Une tâche `@io`/`@db`/`@cpu`/`cpu_map()` échoue avec une exception métier (cas normal, géré via `Result` — pas de bruit par défaut). |
+| `INFO` | Démarrage d'un pool (`@db` au boot, `@cpu` au premier appel). |
+| `WARNING` | Une tâche dépasse son `timeout`. |
+| `ERROR` | Le pool `@cpu` est cassé (`BrokenProcessPool`) et se réinitialise. |
+
+Sans configuration `LOGGING` explicite, Django journalise déjà `WARNING` et
+au-dessus sur la console via son handler racine par défaut — seul `DEBUG`
+demande une configuration explicite pour devenir visible.
 
 ## Limitations connues
 

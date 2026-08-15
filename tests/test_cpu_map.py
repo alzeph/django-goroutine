@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures.process import BrokenProcessPool
 
 from django_goroutine import cpu_map
 
-from .helpers import boom, current_process_id, square, square_unless_two
+from .helpers import (
+    boom,
+    crash_cpu_worker_item,
+    current_process_id,
+    slow_square,
+    square,
+    square_unless_two,
+)
 
 
 async def test_cpu_map_success():
@@ -38,3 +46,19 @@ async def test_cpu_map_runs_across_processes():
     results = await cpu_map(current_process_id, [1, 2])
     pids = {r.unwrap() for r in results}
     assert pids.isdisjoint({os.getpid()})
+
+
+async def test_cpu_map_timeout_becomes_err():
+    results = await cpu_map(slow_square, [1], timeout=0.02)
+    assert results[0].is_err()
+    assert isinstance(results[0].unwrap_err(), TimeoutError)
+
+
+async def test_cpu_map_broken_process_pool_auto_recovers():
+    results = await cpu_map(crash_cpu_worker_item, [1])
+    assert results[0].is_err()
+    assert isinstance(results[0].unwrap_err(), BrokenProcessPool)
+
+    # Le pool a été réinitialisé automatiquement.
+    recovered = await cpu_map(square, [5])
+    assert recovered[0].unwrap() == 25

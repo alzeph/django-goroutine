@@ -46,12 +46,39 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Propagation automatique des `contextvars` de requête (utilisateur,
   langue...) à travers `group()`, aussi bien pour les tâches `@io` (natif
   `asyncio.Task`) que `@db` (natif `asgiref.sync.sync_to_async`).
+- Timeout par tâche : `@io`/`@db`/`@cpu` s'utilisent nus ou paramétrés
+  (`@db(timeout=2.0)`), avec un défaut global optionnel
+  (`GOROUTINE["TASK_TIMEOUT"]`). Un dépassement devient
+  `Err(TimeoutError(...))` sans faire planter les tâches sœurs. `cpu_map()`
+  accepte le même `timeout`, appliqué individuellement à chaque élément.
+- Backpressure sur les pools `@db`/`@cpu` : le nombre de tâches
+  simultanément en file ou en cours est borné
+  (`GOROUTINE["DB_MAX_PENDING"]`/`CPU_MAX_PENDING`, défaut 4× la taille du
+  pool), via un `asyncio.Semaphore` partagé entre `group()` et `cpu_map()`
+  — au-delà, un nouvel appel attend qu'une place se libère plutôt que de
+  s'empiler sans limite dans la file interne de l'executor.
+- Auto-récupération du pool `@cpu` sur `BrokenProcessPool` (worker qui a
+  crashé durement) : la tâche en cours échoue, mais le pool est
+  réinitialisé pour les appels suivants au lieu de rester cassé
+  indéfiniment. Même traitement dans `group()` et `cpu_map()`.
+- Arrêt propre des pools enregistré via `atexit` au démarrage de l'app
+  (`DjangoGoroutineConfig.ready()`) — pas de configuration nécessaire côté
+  projet, en l'absence d'un signal générique d'arrêt applicatif dans
+  Django pour une app réutilisable.
+- Journalisation par défaut sur le logger `"django_goroutine"` : `DEBUG`
+  pour un échec métier sur une tâche, `INFO` au démarrage d'un pool,
+  `WARNING` sur un dépassement de timeout, `ERROR` sur un pool `@cpu` cassé.
+- Dossier [`examples/`](examples/) : projet Django minimal démontrant
+  `group()`/`cpu_map()`/timeout/backpressure, lançable directement depuis
+  le venv du dépôt sans configuration ni dépendance supplémentaire.
 - Suite de tests à 100 % de couverture (`--cov-fail-under=100`) et 0
   warning, incluant les scénarios de concurrence réelle (threads/process
   distincts, gain de temps mesuré), d'annulation structurelle (bug dans le
-  code appelant vs. erreur métier dans une tâche dispatchée) et de
+  code appelant vs. erreur métier dans une tâche dispatchée), de
   contention sqlite (`database is locked` sur écritures concurrentes,
-  documentée plutôt que masquée).
+  documentée plutôt que masquée), de timeout, de backpressure
+  (sérialisation mesurée au-delà de `MAX_PENDING`) et d'auto-récupération
+  sur pool `@cpu` cassé (crash de worker simulé via `os._exit`).
 
 ### Fixed
 

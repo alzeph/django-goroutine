@@ -15,26 +15,35 @@ uv sync --group dev
 ## Vérifications avant de proposer une PR
 
 ```bash
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src tests examples
+uv run ruff format --check src tests examples
 uv run mypy
 uv run pytest --cov=django_goroutine --cov-report=term-missing
+
+# examples/ n'est pas couvert par la suite pytest ci-dessus (settings
+# Django séparés) : vérifier séparément que les migrations s'appliquent et
+# que chaque vue de démo répond toujours après un changement d'API.
+uv run python examples/manage.py migrate
 ```
 
 Ces mêmes vérifications tournent dans la CI (`.github/workflows/ci.yml`) et
 doivent toutes passer avant qu'une PR soit mergeable :
 
-- **ruff** : lint et formatage.
+- **ruff** : lint et formatage, y compris sur `examples/`.
 - **mypy** (`strict = true`, avec `django-stubs`) : le typage doit rester
-  précis, y compris sur `Group.go()` (overloads sync/coroutine).
+  précis, y compris sur `Group.go()` (overloads sync/coroutine). Ne
+  couvre pas `examples/`, exclu de `[tool.mypy] files`.
 - **pytest**, contre Django 4.2/5.0/5.1/5.2/6.0/6.1 (SQLite). La suite
   couvre les trois natures de tâche (`io`/`db`/`cpu`), le succès et l'échec
   de chacune, la concurrence réelle (threads/process distincts, gain de
   temps mesuré), l'annulation structurelle vs. l'erreur métier capturée, la
-  propagation des `contextvars`, et `cpu_map()` (ordre préservé, échec
-  partiel). La couverture est verrouillée à 100 %
-  (`--cov-fail-under=100`) : toute nouvelle branche de code doit être
-  testée.
+  propagation des `contextvars`, le timeout par tâche, la backpressure, et
+  l'auto-récupération sur pool `@cpu` cassé. La couverture est verrouillée
+  à 100 % (`--cov-fail-under=100`) : toute nouvelle branche de code doit
+  être testée.
+- **examples** : un job CI dédié applique les migrations et vérifie que
+  chaque vue de démonstration répond `200` — toute modification de l'API
+  publique doit garder `examples/` synchronisé, pas seulement le README.
 
 Les tests qui exercent `@db` sur plusieurs threads utilisent
 `@pytest.mark.django_db(transaction=True)` : le wrapping transactionnel par
@@ -75,6 +84,12 @@ minimales.
 - Toute fonction destinée à `@cpu`/`cpu_map()` dans les tests doit être
   définie au niveau module (`tests/helpers.py`), jamais en closure locale à
   un test — `ProcessPoolExecutor` échoue à picklier une fonction imbriquée.
+- Toute nouvelle voie d'échec ajoutée à `group()`/`cpu_map()` (timeout,
+  pool cassé...) journalise sur le logger `"django_goroutine"`, pas sur le
+  logger racine ni `print()` — `DEBUG` pour un échec métier normal, `INFO`
+  pour un événement de cycle de vie d'un pool, `WARNING`/`ERROR` pour une
+  condition réellement anormale (timeout, pool cassé). Voir la section
+  Journalisation du README pour le détail par niveau.
 
 ## Commits et PR
 
