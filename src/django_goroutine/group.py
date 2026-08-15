@@ -40,21 +40,28 @@ async def _run_io[T](
 async def _run_db[T](
     fn: Callable[..., T], args: tuple[Any, ...], kwargs: dict[str, Any]
 ) -> Result[T, Exception]:
-    executor = get_db_executor()
-    bound = sync_to_async(fn, thread_sensitive=False, executor=executor)
+    def call_and_close_stale_connection() -> T:
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            # `django.db.connections` est thread-local : ce nettoyage doit
+            # tourner sur le *même* thread que l'appel ci-dessus, sinon il
+            # ne voit pas la connexion qu'il est censé fermer. D'où un seul
+            # sync_to_async englobant les deux, plutôt que deux dispatches
+            # séparés vers un pool où rien ne garantit le même thread.
+            # Jamais un close_all() inconditionnel non plus, qui casserait
+            # l'intérêt même d'un pool de threads/connexions persistant.
+            close_old_connections()
+
+    bound = sync_to_async(
+        call_and_close_stale_connection,
+        thread_sensitive=False,
+        executor=get_db_executor(),
+    )
     try:
-        return Ok(await bound(*args, **kwargs))
+        return Ok(await bound())
     except Exception as exc:  # noqa: BLE001
         return Err(exc)
-    finally:
-        # Rend la connexion du thread réutilisable pour le prochain appel
-        # sans la garder indéfiniment si elle a expiré (CONN_MAX_AGE) ou
-        # est devenue inutilisable — jamais un close_all() inconditionnel,
-        # qui casserait l'intérêt même d'un pool de threads persistant.
-        cleanup = sync_to_async(
-            close_old_connections, thread_sensitive=False, executor=executor
-        )
-        await cleanup()
 
 
 async def _run_cpu[T](

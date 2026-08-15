@@ -72,9 +72,10 @@ INSTALLED_APPS = [
 ]
 ```
 
-`ready()` démarre les deux pools (threads et process) au boot plutôt qu'au
-premier appel, pour ne pas payer leur coût de création sur la première
-requête qui les utilise.
+`ready()` démarre le pool de threads (`@db`) au boot plutôt qu'au premier
+appel, pour ne pas payer son coût de création sur la première requête qui
+l'utilise. Le pool de process (`@cpu`) reste volontairement paresseux
+(créé au premier appel réel) — voir la section Limitations connues.
 
 ## Démarrage rapide
 
@@ -192,12 +193,24 @@ GOROUTINE = {
   PostgreSQL et MySQL encaissent des écritures concurrentes sans ce verrou —
   en développement avec sqlite, augmentez `OPTIONS.timeout` ou évitez les
   écritures concurrentes sur le même pool.
-- **`ProcessPoolExecutor` et démarrage par `fork` après préchargement.**
-  `apps.ready()` crée les pools (donc spawn les process du pool `@cpu`) au
-  boot. Sous un serveur qui précharge l'application avant de forker
-  (gunicorn `--preload`), créer un `ProcessPoolExecutor` avant le fork est
-  une source connue de blocages en `multiprocessing` — évitez `--preload`
-  avec ce projet, ou créez le pool après fork via un hook `post_fork`.
+- **Le pool `@cpu` est paresseux, pas démarré par `apps.ready()`.** Deux
+  raisons, pas une question de goût : `ready()` s'exécute pour n'importe
+  quel process qui charge l'app Django — `migrate`, `shell`, ou même
+  `mypy` via le plugin django-stubs, qui appelle `django.setup()` pour de
+  vrai — pas seulement un serveur applicatif ; spawn des process OS à
+  chaque fois en aurait fait une source de fuites de ressources sur des
+  commandes qui n'utilisent jamais `@cpu`. Et démarrer un
+  `ProcessPoolExecutor` avant un fork (gunicorn `--preload`) est une
+  source connue de blocages en `multiprocessing` — la création paresseuse
+  élimine ce risque au passage, le pool étant créé dans chaque worker
+  après le fork, pas avant. Le pool utilise en outre le contexte `spawn`
+  plutôt que le `fork` par défaut de Linux : forker un process
+  multi-threadé (boucle asyncio + pool `@db`) peut figer l'enfant si un
+  thread tenait un verrou interne au moment du fork — `spawn` démarre un
+  interpréteur neuf, plus lent au premier appel mais sans cet héritage.
+  Chaque worker `spawn` appelle `django.setup()` à son démarrage (via
+  l'`initializer` du pool) pour rester importable même si son module
+  touche, même indirectement, à des modèles Django.
 - **Pas d'annulation automatique des tâches sœurs sur erreur métier.**
   `group()` est volontairement un `sync.WaitGroup`, pas un `errgroup` à
   annulation sur premier échec — voir la section dédiée ci-dessus. Un mode

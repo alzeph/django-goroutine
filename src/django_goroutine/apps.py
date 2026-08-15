@@ -6,10 +6,16 @@ class DjangoGoroutineConfig(AppConfig):
     verbose_name = "Django Goroutine"
 
     def ready(self) -> None:
-        from django_goroutine.executors import get_cpu_executor, get_db_executor
+        from django_goroutine.executors import get_db_executor
 
-        # Démarré au boot plutôt qu'au premier appel : évite de payer le
-        # coût de création du pool (et, pour @cpu, le spawn des process)
-        # sur la première requête qui l'utilise.
+        # Seul le pool de threads (@db) est démarré au boot : c'est peu
+        # coûteux et évite de payer sa création sur la première requête.
+        # Le pool de process (@cpu) reste paresseux, créé au premier appel
+        # réel — `ready()` s'exécute pour n'importe quel process qui charge
+        # l'app Django (migrate, shell, mypy via le plugin django-stubs qui
+        # appelle django.setup() pour de vrai...), pas seulement un serveur
+        # applicatif. Spawn des process OS à chaque `ready()` en faisait
+        # une source de fuites de sémaphores sur des commandes qui
+        # n'utilisent jamais @cpu — et évite au passage tout risque de
+        # ProcessPoolExecutor créé avant un fork (gunicorn --preload).
         get_db_executor()
-        get_cpu_executor()
