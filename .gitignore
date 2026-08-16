@@ -18,3 +18,8 @@ htmlcov/
 .mypy_cache/
 tests/test_db.sqlite3
 examples/db.sqlite3
+
+# Notes personnelles
+linkedin.txt
+linkedin_technique.txt
+linkedin_architecture.txt
