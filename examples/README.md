@@ -1,62 +1,64 @@
 # django-goroutine — playground
 
-Un projet Django minimal pour explorer `group()`, `cpu_map()`, le timeout
-et la backpressure sans rien configurer soi-même : il tourne dans le même
-environnement virtuel que le paquet lui-même (`django-goroutine` y est
-déjà installé, en editable, dès `uv sync`).
+🇬🇧 English · [🇫🇷 Français](README.fr.md)
 
-## Lancer
+A minimal Django project for exploring `group()`, `cpu_map()`, timeout,
+and backpressure without configuring anything yourself: it runs in the
+same virtual environment as the package itself (`django-goroutine` is
+already installed there, in editable mode, as soon as you run `uv sync`).
 
-Depuis la racine du dépôt :
+## Run it
+
+From the repository root:
 
 ```bash
-uv sync --group dev                          # si ce n'est pas déjà fait
+uv sync --group dev                          # if not already done
 uv run python examples/manage.py migrate
 uv run python examples/manage.py runserver
 ```
 
-Puis ouvrir <http://127.0.0.1:8000/> : la page liste chaque démo avec une
-courte description. Chaque endpoint répond en JSON (sauf la page
-d'accueil), lisible directement au navigateur ou via `curl`.
+Then open <http://127.0.0.1:8000/>: the page lists each demo with a short
+description. Every endpoint responds in JSON (except the home page),
+readable directly in the browser or via `curl`.
 
-La console affiche aussi la journalisation de `django_goroutine`
-(`GOROUTINE` dans `config/settings.py` la configure en `DEBUG`) : on y voit
-le démarrage des pools, les timeouts, et les échecs de tâches en direct.
+The console also shows `django_goroutine` logging (`GOROUTINE` in
+`config/settings.py` configures it at `DEBUG`): you'll see pools starting
+up, timeouts, and task failures live.
 
-## Ce que chaque vue démontre
+## What each view demonstrates
 
-- **`/parallel/`** — `group()` combine une tâche `@io` (un appel réseau
-  simulé), `@db` (une vraie requête ORM contre le modèle `Article`) et
-  `@cpu` (un vrai calcul CPU-bound, un hachage répété). `elapsed_seconds`
-  reste proche de la plus lente des trois, pas de leur somme.
-- **`/cpu-map/`** — le même calcul de hachage appliqué à 8 entrées via
-  `cpu_map()`, réparti sur `GOROUTINE["CPU_POOL_SIZE"]` process.
-- **`/timeout/`** — une tâche `@io(timeout=0.05)` qui dort 2 secondes :
-  la vue répond presque immédiatement avec `Err(TimeoutError(...))`.
-- **`/errors/`** — une tâche `@db` qui lève `Article.DoesNotExist` à côté
-  d'une tâche qui réussit : la vue montre que l'échec de l'une n'affecte
-  jamais l'autre.
-- **`/backpressure/`** — 6 tâches `@db` de 0.2s chacune, avec
-  `GOROUTINE["DB_MAX_PENDING"]` volontairement fixé à 2 dans
-  `config/settings.py` (au lieu du défaut 4× la taille du pool) : elles ne
-  tournent jamais plus de deux à la fois, `elapsed_seconds` tourne donc
-  autour de 0.6s plutôt que 0.2s.
+- **`/parallel/`** — `group()` combines an `@io` task (a simulated network
+  call), a `@db` task (a real ORM query against the `Article` model), and a
+  `@cpu` task (a real CPU-bound computation, a repeated hash).
+  `elapsed_seconds` stays close to the slowest of the three, not their sum.
+- **`/cpu-map/`** — the same hash computation applied to 8 inputs via
+  `cpu_map()`, spread across `GOROUTINE["CPU_POOL_SIZE"]` processes.
+- **`/timeout/`** — an `@io(timeout=0.05)` task that sleeps for 2 seconds:
+  the view responds almost immediately with `Err(TimeoutError(...))`.
+- **`/errors/`** — a `@db` task that raises `Article.DoesNotExist` next to
+  a task that succeeds: the view shows that one's failure never affects
+  the other.
+- **`/backpressure/`** — 6 `@db` tasks of 0.2s each, with
+  `GOROUTINE["DB_MAX_PENDING"]` deliberately set to 2 in
+  `config/settings.py` (instead of the default 4× the pool size): they
+  never run more than two at a time, so `elapsed_seconds` hovers around
+  0.6s rather than 0.2s.
 
-## Où regarder le code
+## Where to look at the code
 
-- `playground/tasks.py` — les fonctions `@io`/`@db`/`@cpu`, toutes au
-  niveau module (contrainte de `cpu_map`/`@cpu` : `ProcessPoolExecutor`
-  exige des callables picklables).
-- `playground/views.py` — l'orchestration via `group()`/`cpu_map()`, une
-  vue par démo.
-- `config/settings.py` — la configuration `GOROUTINE` et `LOGGING`
-  minimales pour que tout ça tourne et se voie dans la console.
+- `playground/tasks.py` — the `@io`/`@db`/`@cpu` functions, all at module
+  level (a constraint of `cpu_map`/`@cpu`: `ProcessPoolExecutor` requires
+  picklable callables).
+- `playground/views.py` — the orchestration via `group()`/`cpu_map()`, one
+  view per demo.
+- `config/settings.py` — the minimal `GOROUTINE` and `LOGGING`
+  configuration needed for all of this to run and be visible in the
+  console.
 
-## Ce projet n'est pas un exemple de déploiement en production
+## This project is not a production deployment example
 
-Base sqlite locale, `SECRET_KEY` en clair, `DEBUG = True`,
-`ALLOWED_HOSTS = ["*"]` : volontairement minimal pour explorer la
-librairie en local, pas un modèle de configuration de production — voir
-le [README principal](../README.md#limitations-connues) pour ce qui manque
-réellement avant un déploiement (PostgreSQL/MySQL, serveur ASGI dédié,
-etc.).
+Local sqlite database, `SECRET_KEY` in plaintext, `DEBUG = True`,
+`ALLOWED_HOSTS = ["*"]`: deliberately minimal to explore the library
+locally, not a production configuration template — see the
+[main README](../README.md#known-limitations) for what's actually missing
+before a deployment (PostgreSQL/MySQL, a dedicated ASGI server, etc.).

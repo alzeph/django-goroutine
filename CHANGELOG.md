@@ -1,9 +1,11 @@
 # Changelog
 
-Toutes les modifications notables de ce projet sont documentées ici.
+🇬🇧 English · [🇫🇷 Français](CHANGELOG.fr.md)
 
-Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
-et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
+All notable changes to this project are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
@@ -11,95 +13,92 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
-- `django_goroutine.group()` : orchestrateur structuré au-dessus
-  d'`asyncio.TaskGroup`. `Group.go()` dispatche une tâche décorée `@io`
-  (coroutine, exécutée directement sur la boucle d'événements), `@db`
-  (fonction sync ORM, dispatchée sur un pool de threads dédié avec
-  `asgiref.sync.sync_to_async(thread_sensitive=False)` et nettoyage via
-  `close_old_connections`) ou `@cpu` (fonction sync CPU-bound, dispatchée
-  sur un `ProcessPoolExecutor` persistant). Chaque tâche renvoie un
-  `pycatch.Result` porté par un `TaskHandle` plutôt que de lever — un échec
-  métier sur une tâche ne fait jamais planter ses sœurs.
-- `django_goroutine.cpu_map()` : parallélise un calcul CPU-bound déjà
-  décomposé en unités indépendantes sur le pool de process, avec un
-  `Result` par élément (échec partiel n'interrompt pas le lot).
-- Décorateurs `django_goroutine.io`/`db`/`cpu` : déclarent uniquement
-  *comment* exécuter une fonction, jamais *si* elle doit tourner en
-  concurrence — cette décision reste au point d'appel (`Group.go()`), à la
-  façon du mot-clé `go` en Go plutôt que d'une coloration figée à la
-  définition.
-- `django_goroutine.apps.DjangoGoroutineConfig` : démarre le pool de
-  threads (`@db`) au boot de l'application plutôt qu'au premier appel. Le
-  pool de process (`@cpu`) reste volontairement paresseux — `ready()`
-  s'exécute pour n'importe quel process qui charge l'app Django (`migrate`,
-  `shell`, `mypy` via django-stubs...), pas seulement un serveur
-  applicatif ; spawn systématique de process OS en aurait fait une source
-  de fuites de ressources hors contexte serveur.
-- Pool `@cpu` construit avec le contexte `multiprocessing` `spawn` plutôt
-  que le `fork` par défaut de Linux, pour éviter un blocage classique du
-  fork d'un process multi-threadé (boucle asyncio + pool `@db`), et un
-  `initializer` qui appelle `django.setup()` dans chaque worker fraîchement
-  spawné, pour rester importable même si son module touche à des modèles
-  Django.
-- Réglages `GOROUTINE["DB_POOL_SIZE"]`/`GOROUTINE["CPU_POOL_SIZE"]`,
-  invalidés par `override_settings` comme le reste des projets de l'auteur.
-- Propagation automatique des `contextvars` de requête (utilisateur,
-  langue...) à travers `group()`, aussi bien pour les tâches `@io` (natif
-  `asyncio.Task`) que `@db` (natif `asgiref.sync.sync_to_async`).
-- Timeout par tâche : `@io`/`@db`/`@cpu` s'utilisent nus ou paramétrés
-  (`@db(timeout=2.0)`), avec un défaut global optionnel
-  (`GOROUTINE["TASK_TIMEOUT"]`). Un dépassement devient
-  `Err(TimeoutError(...))` sans faire planter les tâches sœurs. `cpu_map()`
-  accepte le même `timeout`, appliqué individuellement à chaque élément.
-- Backpressure sur les pools `@db`/`@cpu` : le nombre de tâches
-  simultanément en file ou en cours est borné
-  (`GOROUTINE["DB_MAX_PENDING"]`/`CPU_MAX_PENDING`, défaut 4× la taille du
-  pool), via un `asyncio.Semaphore` partagé entre `group()` et `cpu_map()`
-  — au-delà, un nouvel appel attend qu'une place se libère plutôt que de
-  s'empiler sans limite dans la file interne de l'executor.
-- Auto-récupération du pool `@cpu` sur `BrokenProcessPool` (worker qui a
-  crashé durement) : la tâche en cours échoue, mais le pool est
-  réinitialisé pour les appels suivants au lieu de rester cassé
-  indéfiniment. Même traitement dans `group()` et `cpu_map()`.
-- Arrêt propre des pools enregistré via `atexit` au démarrage de l'app
-  (`DjangoGoroutineConfig.ready()`) — pas de configuration nécessaire côté
-  projet, en l'absence d'un signal générique d'arrêt applicatif dans
-  Django pour une app réutilisable.
-- Journalisation par défaut sur le logger `"django_goroutine"` : `DEBUG`
-  pour un échec métier sur une tâche, `INFO` au démarrage d'un pool,
-  `WARNING` sur un dépassement de timeout, `ERROR` sur un pool `@cpu` cassé.
-- Dossier [`examples/`](examples/) : projet Django minimal démontrant
-  `group()`/`cpu_map()`/timeout/backpressure, lançable directement depuis
-  le venv du dépôt sans configuration ni dépendance supplémentaire.
-- Suite de tests à 100 % de couverture (`--cov-fail-under=100`) et 0
-  warning, incluant les scénarios de concurrence réelle (threads/process
-  distincts, gain de temps mesuré), d'annulation structurelle (bug dans le
-  code appelant vs. erreur métier dans une tâche dispatchée), de
-  contention sqlite (`database is locked` sur écritures concurrentes,
-  documentée plutôt que masquée), de timeout, de backpressure
-  (sérialisation mesurée au-delà de `MAX_PENDING`) et d'auto-récupération
-  sur pool `@cpu` cassé (crash de worker simulé via `os._exit`).
+- `django_goroutine.group()`: a structured orchestrator on top of
+  `asyncio.TaskGroup`. `Group.go()` dispatches a task decorated `@io`
+  (coroutine, run directly on the event loop), `@db` (blocking sync ORM
+  function, dispatched to a dedicated thread pool with
+  `asgiref.sync.sync_to_async(thread_sensitive=False)` and cleanup via
+  `close_old_connections`), or `@cpu` (sync CPU-bound function, dispatched
+  to a persistent `ProcessPoolExecutor`). Each task returns a
+  `pycatch.Result` carried by a `TaskHandle` instead of raising — a
+  business failure on one task never crashes its siblings.
+- `django_goroutine.cpu_map()`: parallelizes a CPU-bound computation
+  already broken into independent units on the process pool, with one
+  `Result` per element (a partial failure doesn't interrupt the batch).
+- `django_goroutine.io`/`db`/`cpu` decorators: they only declare *how* to
+  run a function, never *whether* it should run concurrently — that
+  decision stays at the call site (`Group.go()`), in the spirit of Go's
+  `go` keyword rather than a coloring fixed at definition time.
+- `django_goroutine.apps.DjangoGoroutineConfig`: starts the thread pool
+  (`@db`) at application boot rather than on first call. The process pool
+  (`@cpu`) stays deliberately lazy — `ready()` runs for any process that
+  loads the Django app (`migrate`, `shell`, `mypy` via django-stubs...),
+  not just an application server; systematically spawning OS processes
+  would have made it a source of resource leaks outside a server context.
+- `@cpu` pool built with the `spawn` multiprocessing context rather than
+  Linux's default `fork`, to avoid a classic deadlock when forking a
+  multi-threaded process (asyncio loop + `@db` pool), and an `initializer`
+  that calls `django.setup()` in each freshly spawned worker, so it stays
+  importable even if its module touches Django models.
+- `GOROUTINE["DB_POOL_SIZE"]`/`GOROUTINE["CPU_POOL_SIZE"]` settings,
+  overridable via `override_settings` like the rest of the author's
+  projects.
+- Automatic propagation of request `contextvars` (user, language...)
+  through `group()`, both for `@io` tasks (native `asyncio.Task`) and
+  `@db` tasks (native `asgiref.sync.sync_to_async`).
+- Per-task timeout: `@io`/`@db`/`@cpu` are used bare or parameterized
+  (`@db(timeout=2.0)`), with an optional global default
+  (`GOROUTINE["TASK_TIMEOUT"]`). An overrun becomes
+  `Err(TimeoutError(...))` without crashing sibling tasks. `cpu_map()`
+  accepts the same `timeout`, applied individually to each element.
+- Backpressure on the `@db`/`@cpu` pools: the number of tasks
+  simultaneously queued or in flight is bounded
+  (`GOROUTINE["DB_MAX_PENDING"]`/`CPU_MAX_PENDING`, defaulting to 4× the
+  pool size), via an `asyncio.Semaphore` shared between `group()` and
+  `cpu_map()` — beyond that, a new call waits for a slot to free up instead
+  of piling up without limit in the executor's internal queue.
+- `@cpu` pool auto-recovery on `BrokenProcessPool` (a worker that crashed
+  hard): the task in flight fails, but the pool is reset for subsequent
+  calls instead of staying broken indefinitely. Same handling in
+  `group()` and `cpu_map()`.
+- Clean pool shutdown registered via `atexit` at app startup
+  (`DjangoGoroutineConfig.ready()`) — no configuration needed on the
+  project side, given the absence of a generic application-shutdown signal
+  in Django for a reusable app.
+- Default logging on the `"django_goroutine"` logger: `DEBUG` for a
+  business failure on a task, `INFO` when a pool starts, `WARNING` on a
+  timeout overrun, `ERROR` on a broken `@cpu` pool.
+- [`examples/`](examples/) folder: a minimal Django project demonstrating
+  `group()`/`cpu_map()`/timeout/backpressure, launchable directly from the
+  repository's venv with no extra configuration or dependency.
+- Test suite at 100% coverage (`--cov-fail-under=100`) and 0 warnings,
+  including real concurrency scenarios (separate threads/processes,
+  measured time gain), structural cancellation (bug in the calling code vs.
+  business error in a dispatched task), sqlite contention
+  (`database is locked` on concurrent writes, documented rather than
+  hidden), timeout, backpressure (measured serialization past
+  `MAX_PENDING`), and auto-recovery on a broken `@cpu` pool (worker crash
+  simulated via `os._exit`).
 
 ### Fixed
 
-- **`close_old_connections()` pouvait fermer la connexion du mauvais
-  thread.** Appelée séparément de la fonction `@db` elle-même via deux
-  dispatches distincts vers le pool, rien ne garantissait qu'`asgiref` les
-  exécute sur le même thread (`django.db.connections` est thread-local).
-  Les deux tournent maintenant dans un seul `sync_to_async`, garanties sur
-  le même thread.
-- **Les tests sqlite pointaient silencieusement vers une base en mémoire
-  malgré un `NAME` fichier explicite**, provoquant des connexions jamais
-  fermées (`close()` est un no-op volontaire de Django sur une base sqlite
-  en mémoire) détectées en `ResourceWarning` fuyant au hasard des tests.
-  Django bascule sqlite sur `:memory:` par défaut pour la base de *test*
-  quel que soit `NAME`, sauf si `DATABASES["default"]["TEST"]["NAME"]` est
-  fixé explicitement.
-- **Le pool `@cpu` en contexte `fork` (défaut Linux) pouvait figer un
-  worker en CI** sans jamais lever d'erreur explicite — fork d'un process
-  multi-threadé (boucle asyncio + pool `@db`) hérite des verrous internes
-  potentiellement tenus au moment du fork. Voir plus haut (contexte
-  `spawn` + `initializer`).
+- **`close_old_connections()` could close the wrong thread's
+  connection.** Called separately from the `@db` function itself via two
+  distinct dispatches to the pool, nothing guaranteed `asgiref` would run
+  them on the same thread (`django.db.connections` is thread-local). Both
+  now run inside a single `sync_to_async`, guaranteed on the same thread.
+- **sqlite tests were silently pointing at an in-memory database despite
+  an explicit file `NAME`**, causing connections that never closed
+  (`close()` is a deliberate no-op in Django on an in-memory sqlite
+  database) detected as `ResourceWarning` leaking at random across tests.
+  Django switches sqlite to `:memory:` by default for the *test* database
+  regardless of `NAME`, unless
+  `DATABASES["default"]["TEST"]["NAME"]` is set explicitly.
+- **The `@cpu` pool in `fork` context (Linux default) could freeze a
+  worker in CI** without ever raising an explicit error — forking a
+  multi-threaded process (asyncio loop + `@db` pool) inherits internal
+  locks potentially held at fork time. See above (`spawn` context +
+  `initializer`).
 
 [Unreleased]: https://github.com/alzeph/django-goroutine/compare/v1.0.0rc1...main
 [1.0.0rc1]: https://github.com/alzeph/django-goroutine/commits/v1.0.0rc1

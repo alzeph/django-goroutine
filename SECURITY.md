@@ -1,34 +1,35 @@
-# Politique de sécurité
+# Security policy
 
-## Signaler une vulnérabilité
+🇬🇧 English · [🇫🇷 Français](SECURITY.fr.md)
 
-Merci de ne pas ouvrir d'issue publique pour une faille de sécurité.
-Contactez plutôt directement le mainteneur à
-[hervecedricyouan@gmail.com](mailto:hervecedricyouan@gmail.com) avec :
+## Reporting a vulnerability
 
-- une description du problème et de son impact ;
-- les étapes de reproduction ;
-- la version de `django-goroutine` concernée.
+Please don't open a public issue for a security vulnerability. Instead,
+contact the maintainer directly at
+[hervecedricyouan@gmail.com](mailto:hervecedricyouan@gmail.com) with:
 
-Une réponse est visée sous 5 jours ouvrés.
+- a description of the problem and its impact;
+- reproduction steps;
+- the affected `django-goroutine` version.
 
-## Points d'attention spécifiques à un orchestrateur de concurrence
+A response is targeted within 5 business days.
 
-`django-goroutine` exécute du code applicatif sur des pools de threads et de
-process persistants, partagés entre requêtes :
+## Points of attention specific to a concurrency orchestrator
 
-- Une fonction `@db` s'exécute hors du thread de la requête HTTP, mais dans
-  le même process, avec le même accès mémoire et la même configuration
-  Django (y compris les settings sensibles) — ce n'est pas une sandbox.
-- Une fonction `@cpu` s'exécute dans un process séparé
-  (`ProcessPoolExecutor`) : ses arguments et son résultat transitent par
-  `pickle`. Ne jamais passer à `@cpu`/`cpu_map()` des données provenant
-  directement d'une entrée utilisateur non validée en confiant leur
-  désérialisation à un code tiers non maîtrisé — le risque n'est pas propre
-  à cette librairie, mais au `pickle` inter-process en général.
-- Le contexte de requête (utilisateur, langue, session) traverse `group()`
-  via `contextvars`/`asgiref`, comme n'importe quel autre `await` Django. Un
-  bug dans une fonction `@db`/`@cpu` qui lirait ce contexte pour un mauvais
-  utilisateur (fuite de données entre requêtes) est une vulnérabilité de
-  sévérité haute et doit être signalé comme telle, pas comme un bug de
-  fonctionnalité.
+`django-goroutine` runs application code on persistent thread and process
+pools, shared across requests:
+
+- A `@db` function runs outside the HTTP request's thread, but in the same
+  process, with the same memory access and the same Django configuration
+  (including sensitive settings) — this is not a sandbox.
+- A `@cpu` function runs in a separate process (`ProcessPoolExecutor`): its
+  arguments and result go through `pickle`. Never pass to `@cpu`/
+  `cpu_map()` data coming directly from unvalidated user input while
+  trusting its deserialization to unaudited third-party code — the risk
+  isn't specific to this library, but to inter-process `pickle` in
+  general.
+- Request context (user, language, session) travels through `group()` via
+  `contextvars`/`asgiref`, like any other Django `await`. A bug in a
+  `@db`/`@cpu` function that reads this context for the wrong user (data
+  leak between requests) is a high-severity vulnerability and should be
+  reported as such, not as a feature bug.

@@ -1,52 +1,53 @@
 # django-goroutine
 
+🇬🇧 English · [🇫🇷 Français](README.fr.md)
+
 [![CI](https://github.com/alzeph/django-goroutine/actions/workflows/ci.yml/badge.svg)](https://github.com/alzeph/django-goroutine/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/django-goroutine.svg)](https://pypi.org/project/django-goroutine/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](pyproject.toml)
 
-> **Release candidate.** `django-goroutine` est en `1.0.0rc1` : l'API est
-> considérée figée mais n'a pas encore été éprouvée par un usage réel en
-> dehors de ce dépôt. Les retours (issues, cas d'usage, bugs) sont les
-> bienvenus avant de tagger la version `1.0.0` finale — voir
-> [RELEASING.md](RELEASING.md).
+> **Release candidate.** `django-goroutine` is at `1.0.0rc1`: the API is
+> considered frozen but has not yet been battle-tested by real-world usage
+> outside this repository. Feedback (issues, use cases, bugs) is welcome
+> before the final `1.0.0` is tagged — see [RELEASING.md](RELEASING.md).
 
-Un orchestrateur structuré de tâches concurrentes pour Django, inspiré du
-modèle de concurrence de Go — sans prétendre le reproduire à l'identique.
+A structured concurrent-task orchestrator for Django, inspired by Go's
+concurrency model — without pretending to reproduce it identically.
 
-## Le problème
+## The problem
 
-Django sait exécuter des vues et des méthodes ORM en `async`/`await`, mais
-ne donne aucun outil clé en main pour lancer plusieurs opérations
-indépendantes en parallèle dans une vue. À la main avec `asyncio.gather`, on
-se heurte vite à trois obstacles : le pool de connexions de l'ORM (historique
-sync) qui se comporte mal sous plusieurs threads, le contexte de requête
-(utilisateur, langue, session) qui ne se propage pas toujours proprement, et
-une dizaine de lignes de tuyauterie pour annuler/nettoyer si une sous-tâche
-échoue. `django-goroutine` fournit `group()` (au-dessus d'`asyncio.TaskGroup`)
-et `cpu_map()` (au-dessus d'un `ProcessPoolExecutor` persistant) pour couvrir
-ces trois obstacles, avec des erreurs par tâche renvoyées en
-[`pycatch.Result`](https://pypi.org/project/pycatch-safe/) plutôt que levées.
+Django can run views and ORM methods with `async`/`await`, but it gives you
+no off-the-shelf tool for launching several independent operations in
+parallel inside a view. Rolling your own with `asyncio.gather` quickly runs
+into three obstacles: the ORM's connection pool (historically sync), which
+misbehaves across multiple threads; request context (user, language,
+session), which doesn't always propagate cleanly; and a dozen lines of
+plumbing to cancel/clean up if a subtask fails. `django-goroutine` provides
+`group()` (built on top of `asyncio.TaskGroup`) and `cpu_map()` (built on
+top of a persistent `ProcessPoolExecutor`) to cover these three obstacles,
+with per-task errors returned as
+[`pycatch.Result`](https://pypi.org/project/pycatch-safe/) rather than
+raised.
 
-## Ce que "goroutine" ne veut pas dire ici
+## What "goroutine" doesn't mean here
 
-Une goroutine Go est un thread vert géré par le runtime, capable de migrer
-entre threads OS. Python garde une boucle d'événements unique et
-coopérative : `group()` ne réplique pas ce modèle, il en reprend l'esprit —
-le point d'appel décide quoi lancer en concurrence, pas la fonction
-elle-même — avec trois façons distinctes d'exécuter une tâche selon sa
-nature réelle :
+A Go goroutine is a green thread managed by the runtime, able to migrate
+between OS threads. Python keeps a single, cooperative event loop:
+`group()` doesn't replicate that model, it borrows its spirit — the call
+site decides what to run concurrently, not the function itself — with
+three distinct ways to run a task depending on its actual nature:
 
-| Décorateur | Nature de la tâche | Exécutée sur |
+| Decorator | Nature of the task | Runs on |
 |---|---|---|
-| `@io` (ou une coroutine non décorée) | Attente réseau/disque (`async def`) | La boucle d'événements, sans thread ni process dédié |
-| `@db` | Appel ORM sync bloquant | Le pool de threads dédié (`GOROUTINE["DB_POOL_SIZE"]`) |
-| `@cpu` | Calcul CPU-bound sync | Le pool de process dédié (`GOROUTINE["CPU_POOL_SIZE"]`) |
+| `@io` (or an undecorated coroutine) | Network/disk wait (`async def`) | The event loop, no dedicated thread or process |
+| `@db` | Blocking sync ORM call | The dedicated thread pool (`GOROUTINE["DB_POOL_SIZE"]`) |
+| `@cpu` | Sync CPU-bound computation | The dedicated process pool (`GOROUTINE["CPU_POOL_SIZE"]`) |
 
-Ce choix explicite plutôt qu'une détection automatique est délibéré : une
-heuristique (timing, introspection) pour deviner la nature d'une fonction
-serait peu fiable et reproduirait justement les bugs sournois que ce projet
-cherche à éviter.
+This explicit choice, rather than automatic detection, is deliberate: a
+heuristic (timing, introspection) for guessing a function's nature would be
+unreliable and would reproduce exactly the kind of sneaky bugs this project
+is trying to avoid.
 
 ## Installation
 
@@ -55,9 +56,9 @@ uv add django-goroutine
 pip install django-goroutine
 ```
 
-Une release candidate n'étant pas une version finale, PyPI ne l'installe
-pas par défaut avec `pip install django-goroutine` — utilisez `--pre` ou
-fixez la version exacte tant que `1.0.0` n'est pas taggé :
+Since a release candidate isn't a final version, PyPI doesn't install it by
+default with `pip install django-goroutine` — use `--pre` or pin the exact
+version until `1.0.0` is tagged:
 
 ```bash
 uv add "django-goroutine==1.0.0rc1"
@@ -72,12 +73,12 @@ INSTALLED_APPS = [
 ]
 ```
 
-`ready()` démarre le pool de threads (`@db`) au boot plutôt qu'au premier
-appel, pour ne pas payer son coût de création sur la première requête qui
-l'utilise. Le pool de process (`@cpu`) reste volontairement paresseux
-(créé au premier appel réel) — voir la section Limitations connues.
+`ready()` starts the thread pool (`@db`) at boot rather than on first call,
+so its creation cost isn't paid on the first request that uses it. The
+process pool (`@cpu`) stays deliberately lazy (created on the first actual
+call) — see the Known limitations section.
 
-## Démarrage rapide
+## Quick start
 
 ```python
 from django_goroutine import db, group, io
@@ -107,50 +108,48 @@ async def profile_view(request, user_id):
             ...
 ```
 
-`fetch_user` et `fetch_avatar` tournent en parallèle : le temps de réponse
-de la vue tombe au temps de la plus lente des deux, pas à leur somme.
+`fetch_user` and `fetch_avatar` run in parallel: the view's response time
+drops to the time of the slower of the two, not their sum.
 
-Pour voir tout ça tourner sans rien configurer soi-même, voir
-[`examples/`](examples/) : un projet Django minimal avec des vues qui
-démontrent `group()`, `cpu_map()`, le timeout et la backpressure, lançable
-en une commande depuis ce dépôt.
+To see all of this running without configuring anything yourself, see
+[`examples/`](examples/): a minimal Django project with views that
+demonstrate `group()`, `cpu_map()`, timeout, and backpressure, launchable
+with a single command from this repository.
 
-### Héritage des appels internes
+### Inheritance of internal calls
 
-Une fonction appelée *depuis* `fetch_user` (une aide interne, un second
-appel ORM) s'exécute simplement dans le même appel de pile, sur le même
-thread — aucune décoration supplémentaire n'est nécessaire ni utile. Le
-décorateur ne sert qu'au moment où `Group.go()` dispatche la tâche, pas à la
-propagation interne des appels.
+A function called *from* `fetch_user` (an internal helper, a second ORM
+call) simply runs in the same call stack, on the same thread — no further
+decoration is needed or useful. The decorator only matters at the moment
+`Group.go()` dispatches the task, not for internal call propagation.
 
-### Erreurs par tâche, pas d'annulation en cascade sur erreur métier
+### Per-task errors, no cascading cancellation on business errors
 
-N'importe quelle exception levée par une tâche dispatchée devient un `Err`
-porté par son `TaskHandle` : elle ne fait jamais planter les tâches sœurs ni
-le bloc englobant — `group()` est un `sync.WaitGroup`, pas un `errgroup` à
-annulation automatique sur erreur métier. L'annulation reste possible, mais
-seulement de façon structurelle : si le bloc `async with group()` lui-même
-est annulé de l'extérieur (timeout du serveur ASGI, déconnexion client), les
-tâches encore en cours sont annulées par `asyncio.TaskGroup`, comme
-n'importe quel autre `await`.
+Any exception raised by a dispatched task becomes an `Err` carried by its
+`TaskHandle`: it never crashes sibling tasks or the enclosing block —
+`group()` is a `sync.WaitGroup`, not an `errgroup` with automatic
+cancellation on business error. Cancellation is still possible, but only
+structurally: if the `async with group()` block itself is cancelled from
+the outside (ASGI server timeout, client disconnect), the tasks still in
+flight are cancelled by `asyncio.TaskGroup`, like any other `await`.
 
 ```python
 async with group() as g:
-    a = g.go(fetch_user, user_id)      # échoue
-    b = g.go(fetch_avatar, avatar_url) # continue quand même, n'est pas annulée
+    a = g.go(fetch_user, user_id)      # fails
+    b = g.go(fetch_avatar, avatar_url) # keeps running regardless, not cancelled
 
 a.result()  # Err(UserDoesNotExist(...))
 b.result()  # Ok(b"...")
 ```
 
-`TaskHandle.result()` ne peut être lu qu'une fois le bloc `async with
-group()` refermé — l'appeler avant lève `RuntimeError`.
+`TaskHandle.result()` can only be read once the `async with group()` block
+has closed — calling it before that raises `RuntimeError`.
 
-### Timeout par tâche
+### Per-task timeout
 
-Un timeout par défaut ne peut pas se poser sur `Group.go()` lui-même (ses
-`*args`/`**kwargs` sont déjà réservés au transfert vers la fonction
-décorée), donc `@io`/`@db`/`@cpu` s'utilisent nus ou paramétrés :
+A default timeout can't be set on `Group.go()` itself (its `*args`/
+`**kwargs` are already reserved for forwarding to the decorated function),
+so `@io`/`@db`/`@cpu` are used bare or parameterized:
 
 ```python
 @db(timeout=2.0)
@@ -158,46 +157,46 @@ def fetch_user(user_id: int) -> User:
     return User.objects.get(pk=user_id)
 ```
 
-Au-delà de `timeout` secondes, `TaskHandle.result()` devient
-`Err(TimeoutError(...))` — sans faire planter les tâches sœurs, comme
-n'importe quel autre échec. `GOROUTINE["TASK_TIMEOUT"]` fixe une valeur par
-défaut pour les tâches qui ne précisent pas la leur (`None` par défaut, donc
-pas de timeout du tout tant que rien n'est configuré). Une réserve
-importante à connaître : Python ne peut pas interrompre de force un thread
-ou un process déjà lancé sur la tâche — passé le timeout, l'appelant cesse
-d'attendre et récupère son `Err`, mais le thread/process continue
-d'exécuter la tâche en arrière-plan jusqu'à sa fin naturelle.
+Past `timeout` seconds, `TaskHandle.result()` becomes
+`Err(TimeoutError(...))` — without crashing sibling tasks, like any other
+failure. `GOROUTINE["TASK_TIMEOUT"]` sets a default value for tasks that
+don't specify their own (`None` by default, so no timeout at all until
+something is configured). An important caveat to know: Python cannot
+forcibly interrupt a thread or process already running the task — past the
+timeout, the caller stops waiting and gets its `Err` back, but the
+thread/process keeps executing the task in the background until it
+naturally finishes.
 
 ### Backpressure
 
-Le nombre de tâches `@db`/`@cpu` simultanément en file ou en cours est
-borné (`GOROUTINE["DB_MAX_PENDING"]`/`CPU_MAX_PENDING`, par défaut 4× la
-taille du pool correspondant) : au-delà, un nouvel appel attend qu'une
-place se libère plutôt que de s'empiler sans limite dans la file interne de
-l'executor — c'est ce qui évite qu'un pic de charge fasse exploser la
-mémoire ou la latence au lieu d'échouer ou d'attendre proprement. Ça se
-combine naturellement avec `timeout`, qui borne alors l'attente d'une place
-libre *et* l'exécution elle-même.
+The number of `@db`/`@cpu` tasks simultaneously queued or in flight is
+bounded (`GOROUTINE["DB_MAX_PENDING"]`/`CPU_MAX_PENDING`, defaulting to 4×
+the size of the corresponding pool): beyond that, a new call waits for a
+slot to free up instead of piling up without limit in the executor's
+internal queue — this is what keeps a load spike from blowing up memory or
+latency instead of failing or waiting cleanly. This combines naturally with
+`timeout`, which then bounds both the wait for a free slot *and* the
+execution itself.
 
-### Auto-récupération du pool `@cpu`
+### `@cpu` pool auto-recovery
 
-Si un worker du pool `@cpu` crashe durement (segfault, `os._exit`...), le
-pool entier devient inutilisable (`BrokenProcessPool`) tant qu'il n'est pas
-recréé. `django-goroutine` détecte ce cas et réinitialise le pool
-automatiquement : l'appel en cours échoue (`Err(BrokenProcessPool(...))`,
-pas de retry automatique — rejouer une fonction qui a peut-être déjà eu des
-effets de bord serait pire), mais les appels suivants retrouvent un pool
-sain plutôt que de rester cassés indéfiniment.
+If a `@cpu` pool worker crashes hard (segfault, `os._exit`...), the whole
+pool becomes unusable (`BrokenProcessPool`) until it's recreated.
+`django-goroutine` detects this case and resets the pool automatically: the
+call in flight fails (`Err(BrokenProcessPool(...))`, no automatic retry —
+replaying a function that may already have had side effects would be
+worse), but subsequent calls get a healthy pool back instead of staying
+broken indefinitely.
 
-## Paralléliser un calcul CPU-bound (`cpu_map`)
+## Parallelizing a CPU-bound computation (`cpu_map`)
 
-`@cpu` sur `group().go()` ne fait gagner du temps que sur du travail déjà
-découpé en unités indépendantes. Une seule fonction CPU-bound dispatchée
-seule n'accélère pas — exactement comme une goroutine Go seule n'accélère
-pas un calcul monolithique : le gain vient toujours du découpage en unités
-indépendantes réparties sur plusieurs cœurs, jamais de l'outil
-d'orchestration en lui-même. `cpu_map()` couvre le cas où ce découpage
-existe déjà :
+`@cpu` on `group().go()` only saves time on work already split into
+independent units. A single CPU-bound function dispatched alone doesn't
+speed anything up — exactly like a single Go goroutine doesn't speed up a
+monolithic computation: the gain always comes from splitting into
+independent units spread across several cores, never from the
+orchestration tool itself. `cpu_map()` covers the case where that split
+already exists:
 
 ```python
 from django_goroutine import cpu_map
@@ -212,38 +211,38 @@ async def batch_resize_view(request, images):
     ...
 ```
 
-`fn` doit être une fonction sync CPU-bound, importable au niveau module
-(contrainte de `pickle` du `ProcessPoolExecutor` sous-jacent) — jamais une
-lambda, une closure, ou une méthode d'instance liée. Un échec sur un
-élément, y compris un dépassement de `timeout` (secondes, optionnel,
-appliqué individuellement à chaque élément — `cpu_map(fn, items,
-timeout=5.0)`) ou un pool `@cpu` cassé (auto-réinitialisé), ne fait pas
-échouer les autres : chaque résultat est un `Result` indépendant, dans
-l'ordre d'entrée. `cpu_map()` partage le même sémaphore de backpressure que
-les tâches `@cpu` de `group()` — les deux se disputent la même ressource.
+`fn` must be a sync CPU-bound function, importable at module level (a
+`pickle` constraint of the underlying `ProcessPoolExecutor`) — never a
+lambda, a closure, or a bound instance method. A failure on one element,
+including a `timeout` overrun (seconds, optional, applied individually to
+each element — `cpu_map(fn, items, timeout=5.0)`) or a broken `@cpu` pool
+(auto-reset), doesn't fail the others: each result is an independent
+`Result`, in input order. `cpu_map()` shares the same backpressure
+semaphore as `group()`'s `@cpu` tasks — both compete for the same
+resource.
 
-Le GIL empêche deux threads d'exécuter du bytecode Python en parallèle : si
-votre calcul lourd passe déjà par une bibliothèque C qui relâche le GIL
-(numpy, Pillow, OpenCV, hashlib...), `@db`-style thread offload suffirait —
-`@cpu`/`cpu_map()` n'apportent un vrai gain que pour du code Python pur
-CPU-bound, via des process séparés.
+The GIL prevents two threads from executing Python bytecode in parallel: if
+your heavy computation already goes through a C library that releases the
+GIL (numpy, Pillow, OpenCV, hashlib...), `@db`-style thread offload would
+be enough — `@cpu`/`cpu_map()` only bring a real gain for pure CPU-bound
+Python code, via separate processes.
 
 ## Configuration
 
 ```python
 GOROUTINE = {
-    "DB_POOL_SIZE": 10,                # taille du pool de threads @db
-    "CPU_POOL_SIZE": os.cpu_count(),   # taille du pool de process @cpu
-    "DB_MAX_PENDING": None,            # backpressure @db ; None => DB_POOL_SIZE * 4
-    "CPU_MAX_PENDING": None,           # backpressure @cpu/cpu_map ; None => CPU_POOL_SIZE * 4
-    "TASK_TIMEOUT": None,              # timeout par défaut (secondes) ; None => aucun
+    "DB_POOL_SIZE": 10,                # @db thread pool size
+    "CPU_POOL_SIZE": os.cpu_count(),   # @cpu process pool size
+    "DB_MAX_PENDING": None,            # @db backpressure; None => DB_POOL_SIZE * 4
+    "CPU_MAX_PENDING": None,           # @cpu/cpu_map backpressure; None => CPU_POOL_SIZE * 4
+    "TASK_TIMEOUT": None,              # default timeout (seconds); None => none
 }
 ```
 
-## Journalisation
+## Logging
 
-Toutes les tâches et événements de pool passent par le logger Python
-`"django_goroutine"`, à brancher comme n'importe quel autre logger Django :
+All task and pool events go through the Python logger
+`"django_goroutine"`, to be wired up like any other Django logger:
 
 ```python
 LOGGING = {
@@ -256,53 +255,50 @@ LOGGING = {
 }
 ```
 
-| Niveau | Émis pour |
+| Level | Emitted for |
 |---|---|
-| `DEBUG` | Une tâche `@io`/`@db`/`@cpu`/`cpu_map()` échoue avec une exception métier (cas normal, géré via `Result` — pas de bruit par défaut). |
-| `INFO` | Démarrage d'un pool (`@db` au boot, `@cpu` au premier appel). |
-| `WARNING` | Une tâche dépasse son `timeout`. |
-| `ERROR` | Le pool `@cpu` est cassé (`BrokenProcessPool`) et se réinitialise. |
+| `DEBUG` | An `@io`/`@db`/`@cpu`/`cpu_map()` task fails with a business exception (normal case, handled via `Result` — no noise by default). |
+| `INFO` | A pool starting up (`@db` at boot, `@cpu` on first call). |
+| `WARNING` | A task exceeds its `timeout`. |
+| `ERROR` | The `@cpu` pool is broken (`BrokenProcessPool`) and resets. |
 
-Sans configuration `LOGGING` explicite, Django journalise déjà `WARNING` et
-au-dessus sur la console via son handler racine par défaut — seul `DEBUG`
-demande une configuration explicite pour devenir visible.
+Without an explicit `LOGGING` configuration, Django already logs `WARNING`
+and above to the console via its default root handler — only `DEBUG`
+requires explicit configuration to become visible.
 
-## Limitations connues
+## Known limitations
 
-- **sqlite et écritures concurrentes.** sqlite n'a qu'un verrou d'écriture
-  global : plusieurs fonctions `@db` qui écrivent en parallèle contre une
-  base sqlite peuvent lever `OperationalError("database is locked")`.
-  PostgreSQL et MySQL encaissent des écritures concurrentes sans ce verrou —
-  en développement avec sqlite, augmentez `OPTIONS.timeout` ou évitez les
-  écritures concurrentes sur le même pool.
-- **Le pool `@cpu` est paresseux, pas démarré par `apps.ready()`.** Deux
-  raisons, pas une question de goût : `ready()` s'exécute pour n'importe
-  quel process qui charge l'app Django — `migrate`, `shell`, ou même
-  `mypy` via le plugin django-stubs, qui appelle `django.setup()` pour de
-  vrai — pas seulement un serveur applicatif ; spawn des process OS à
-  chaque fois en aurait fait une source de fuites de ressources sur des
-  commandes qui n'utilisent jamais `@cpu`. Et démarrer un
-  `ProcessPoolExecutor` avant un fork (gunicorn `--preload`) est une
-  source connue de blocages en `multiprocessing` — la création paresseuse
-  élimine ce risque au passage, le pool étant créé dans chaque worker
-  après le fork, pas avant. Le pool utilise en outre le contexte `spawn`
-  plutôt que le `fork` par défaut de Linux : forker un process
-  multi-threadé (boucle asyncio + pool `@db`) peut figer l'enfant si un
-  thread tenait un verrou interne au moment du fork — `spawn` démarre un
-  interpréteur neuf, plus lent au premier appel mais sans cet héritage.
-  Chaque worker `spawn` appelle `django.setup()` à son démarrage (via
-  l'`initializer` du pool) pour rester importable même si son module
-  touche, même indirectement, à des modèles Django.
-- **Pas d'annulation automatique des tâches sœurs sur erreur métier.**
-  `group()` est volontairement un `sync.WaitGroup`, pas un `errgroup` à
-  annulation sur premier échec — voir la section dédiée ci-dessus. Un mode
-  `cancel_on_error` pourrait être ajouté dans une version mineure future si
-  le besoin se confirme à l'usage.
-- **`@cpu`/`cpu_map()` exigent des fonctions picklables au niveau module.**
-  Contrainte de `ProcessPoolExecutor`, pas de ce projet — une lambda, une
-  closure ou une méthode liée échouent silencieusement à être picklées.
+- **sqlite and concurrent writes.** sqlite only has a global write lock:
+  several `@db` functions writing in parallel against a sqlite database can
+  raise `OperationalError("database is locked")`. PostgreSQL and MySQL
+  absorb concurrent writes without this lock — in development with sqlite,
+  increase `OPTIONS.timeout` or avoid concurrent writes on the same pool.
+- **The `@cpu` pool is lazy, not started by `apps.ready()`.** Two reasons,
+  not a matter of taste: `ready()` runs for any process that loads the
+  Django app — `migrate`, `shell`, or even `mypy` via the django-stubs
+  plugin, which really does call `django.setup()` — not just an
+  application server; spawning OS processes every time would have made it
+  a source of resource leaks on commands that never use `@cpu`. And
+  starting a `ProcessPoolExecutor` before a fork (gunicorn `--preload`) is
+  a known source of `multiprocessing` deadlocks — lazy creation eliminates
+  this risk along the way, the pool being created in each worker after the
+  fork, not before. The pool also uses the `spawn` multiprocessing context
+  rather than Linux's default `fork`: forking a multi-threaded process
+  (asyncio loop + `@db` pool) can freeze the child if a thread held an
+  internal lock at fork time — `spawn` starts a fresh interpreter, slower
+  on the first call but without that inheritance. Each `spawn` worker calls
+  `django.setup()` on startup (via the pool's `initializer`) so it stays
+  importable even if its module touches, even indirectly, Django models.
+- **No automatic cancellation of sibling tasks on business error.**
+  `group()` is deliberately a `sync.WaitGroup`, not an `errgroup` with
+  cancellation on first failure — see the dedicated section above. A
+  `cancel_on_error` mode could be added in a future minor version if the
+  need is confirmed by usage.
+- **`@cpu`/`cpu_map()` require module-level picklable functions.** A
+  constraint of `ProcessPoolExecutor`, not of this project — a lambda, a
+  closure, or a bound method silently fail to be pickled.
 
-## Développement
+## Development
 
 ```bash
 uv sync --group dev
@@ -313,10 +309,10 @@ uv run mypy
 uv run pytest --cov=django_goroutine --cov-report=term-missing
 ```
 
-Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour contribuer,
-[CHANGELOG.md](CHANGELOG.md) pour l'historique des versions, et
-[RELEASING.md](RELEASING.md) pour le processus de publication.
+See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute,
+[CHANGELOG.md](CHANGELOG.md) for the version history, and
+[RELEASING.md](RELEASING.md) for the release process.
 
-## Licence
+## License
 
 [MIT](LICENSE)
