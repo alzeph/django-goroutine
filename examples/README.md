@@ -1,6 +1,6 @@
 # django-goroutine — playground
 
-🇬🇧 English · [🇫🇷 Français](README.fr.md)
+English · [Français](README.fr.md)
 
 A minimal Django project for exploring `group()`, `cpu_map()`, timeout,
 and backpressure without configuring anything yourself: it runs in the

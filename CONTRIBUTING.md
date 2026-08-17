@@ -1,6 +1,6 @@
 # Contributing to django-goroutine
 
-🇬🇧 English · [🇫🇷 Français](CONTRIBUTING.fr.md)
+English · [Français](CONTRIBUTING.fr.md)
 
 Thanks for wanting to contribute! This guide describes how to set up the
 development environment and what's expected for a pull request.

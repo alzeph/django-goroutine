@@ -1,6 +1,6 @@
 # django-goroutine
 
-[🇬🇧 English](README.md) · 🇫🇷 Français
+[English](README.md) · Français
 
 [![CI](https://github.com/alzeph/django-goroutine/actions/workflows/ci.yml/badge.svg)](https://github.com/alzeph/django-goroutine/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/django-goroutine.svg)](https://pypi.org/project/django-goroutine/)

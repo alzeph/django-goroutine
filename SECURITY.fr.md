@@ -1,6 +1,6 @@
 # Politique de sécurité
 
-[🇬🇧 English](SECURITY.md) · 🇫🇷 Français
+[English](SECURITY.md) · Français
 
 ## Signaler une vulnérabilité
 

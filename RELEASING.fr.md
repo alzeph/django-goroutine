@@ -1,6 +1,6 @@
 # Process de release
 
-[🇬🇧 English](RELEASING.md) · 🇫🇷 Français
+[English](RELEASING.md) · Français
 
 Ce document décrit comment publier une nouvelle version de
 `django-goroutine` sur PyPI. Il s'adresse à toute personne ayant les droits

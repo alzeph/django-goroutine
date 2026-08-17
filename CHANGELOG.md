@@ -1,6 +1,6 @@
 # Changelog
 
-🇬🇧 English · [🇫🇷 Français](CHANGELOG.fr.md)
+English · [Français](CHANGELOG.fr.md)
 
 All notable changes to this project are documented here.
 

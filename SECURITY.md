@@ -1,6 +1,6 @@
 # Security policy
 
-🇬🇧 English · [🇫🇷 Français](SECURITY.fr.md)
+English · [Français](SECURITY.fr.md)
 
 ## Reporting a vulnerability
 
