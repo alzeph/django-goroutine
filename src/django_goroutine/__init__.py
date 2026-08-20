@@ -10,7 +10,7 @@ from django_goroutine.cpu_map import cpu_map
 from django_goroutine.decorators import cpu, db, io
 from django_goroutine.group import Group, TaskHandle, group
 
-__version__ = "1.0.0rc1"
+__version__ = "1.0.0rc2"
 
 __all__ = [
     "Group",

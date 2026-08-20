@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](pyproject.toml)
 
-> **Release candidate.** `django-goroutine` est en `1.0.0rc1` : l'API est
+> **Release candidate.** `django-goroutine` est en `1.0.0rc2` : l'API est
 > considérée figée mais n'a pas encore été éprouvée par un usage réel en
 > dehors de ce dépôt. Les retours (issues, cas d'usage, bugs) sont les
 > bienvenus avant de tagger la version `1.0.0` finale — voir
@@ -62,8 +62,8 @@ pas par défaut avec `pip install django-goroutine` — utilisez `--pre` ou
 fixez la version exacte tant que `1.0.0` n'est pas taggé :
 
 ```bash
-uv add "django-goroutine==1.0.0rc1"
-pip install "django-goroutine==1.0.0rc1"
+uv add "django-goroutine==1.0.0rc2"
+pip install "django-goroutine==1.0.0rc2"
 ```
 
 ```python
@@ -191,6 +191,16 @@ pas de retry automatique — rejouer une fonction qui a peut-être déjà eu des
 effets de bord serait pire), mais les appels suivants retrouvent un pool
 sain plutôt que de rester cassés indéfiniment.
 
+Le pool étant partagé, un crash ne reste pas forcément isolé à la tâche qui
+l'a causé : `ProcessPoolExecutor` marque aussi comme
+`Err(BrokenProcessPool(...))` toute tâche encore en file ou en cours sur ce
+même pool, pas seulement celle dont le worker a réellement crashé — une
+tâche `@cpu` sœur parfaitement saine, en cours au même moment, peut devenir
+un dégât collatéral d'un crash qui n'a rien à voir avec elle. C'est une
+caractéristique de `ProcessPoolExecutor`, pas quelque chose que
+`django-goroutine` peut isoler sans renoncer à un pool partagé entre les
+appels ; les tâches `@io`/`@db` du même `group()` ne sont pas concernées.
+
 ## Paralléliser un calcul CPU-bound (`cpu_map`)
 
 `@cpu` sur `group().go()` ne fait gagner du temps que sur du travail déjà
@@ -303,6 +313,11 @@ demande une configuration explicite pour devenir visible.
 - **`@cpu`/`cpu_map()` exigent des fonctions picklables au niveau module.**
   Contrainte de `ProcessPoolExecutor`, pas de ce projet — une lambda, une
   closure ou une méthode liée échouent silencieusement à être picklées.
+- **Un crash du pool `@cpu` peut affecter des tâches sœurs saines.** Voir
+  la section auto-récupération du pool `@cpu` ci-dessus :
+  `ProcessPoolExecutor` fait échouer toute tâche encore en file ou en cours
+  sur le pool quand un worker crashe durement, pas seulement celle qui a
+  déclenché le crash.
 
 ## Développement
 

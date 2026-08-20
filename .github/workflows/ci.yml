@@ -9,6 +9,7 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
@@ -20,6 +21,7 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
@@ -30,6 +32,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
@@ -40,6 +43,7 @@ jobs:
 
   test-django-versions:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +59,7 @@ jobs:
 
   examples:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       DJANGO_SETTINGS_MODULE: config.settings
       PYTHONPATH: examples
@@ -80,6 +85,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [lint, typecheck, test, test-django-versions, examples]
     steps:
       - uses: actions/checkout@v7
