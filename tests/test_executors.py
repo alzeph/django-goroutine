@@ -79,6 +79,19 @@ def test_db_semaphore_respects_explicit_max_pending(settings):
     assert get_db_semaphore()._value == 3
 
 
+def test_db_semaphore_respects_explicit_zero_max_pending(settings):
+    # `0` est une valeur explicite valide (bloque tout appel @db tant que
+    # rien ne relâche le sémaphore) : elle ne doit pas retomber sur le
+    # défaut calculé (DB_POOL_SIZE * 4) comme le ferait un `0 or default`.
+    settings.GOROUTINE = {"DB_MAX_PENDING": 0}
+    assert get_db_semaphore()._value == 0
+
+
+def test_cpu_semaphore_respects_explicit_zero_max_pending(settings):
+    settings.GOROUTINE = {"CPU_MAX_PENDING": 0}
+    assert get_cpu_semaphore()._value == 0
+
+
 def test_reset_db_executor_does_not_touch_cpu_executor():
     get_db_executor()
     cpu_before = get_cpu_executor()

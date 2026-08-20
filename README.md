@@ -7,7 +7,7 @@ English · [Français](README.fr.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](pyproject.toml)
 
-> **Release candidate.** `django-goroutine` is at `1.0.0rc1`: the API is
+> **Release candidate.** `django-goroutine` is at `1.0.0rc2`: the API is
 > considered frozen but has not yet been battle-tested by real-world usage
 > outside this repository. Feedback (issues, use cases, bugs) is welcome
 > before the final `1.0.0` is tagged — see [RELEASING.md](RELEASING.md).
@@ -61,8 +61,8 @@ default with `pip install django-goroutine` — use `--pre` or pin the exact
 version until `1.0.0` is tagged:
 
 ```bash
-uv add "django-goroutine==1.0.0rc1"
-pip install "django-goroutine==1.0.0rc1"
+uv add "django-goroutine==1.0.0rc2"
+pip install "django-goroutine==1.0.0rc2"
 ```
 
 ```python
@@ -188,6 +188,16 @@ replaying a function that may already have had side effects would be
 worse), but subsequent calls get a healthy pool back instead of staying
 broken indefinitely.
 
+Because the pool is shared, a crash isn't necessarily isolated to the task
+that caused it: `ProcessPoolExecutor` marks every task still queued or in
+flight on that same pool as `Err(BrokenProcessPool(...))` too, not only the
+one whose worker actually died — a perfectly healthy sibling `@cpu` task
+running at the same moment can become collateral damage of a crash that has
+nothing to do with it. This is a `ProcessPoolExecutor` characteristic, not
+something `django-goroutine` can isolate away without giving up a pool
+shared across calls; `@io`/`@db` tasks in the same `group()` are
+unaffected.
+
 ## Parallelizing a CPU-bound computation (`cpu_map`)
 
 `@cpu` on `group().go()` only saves time on work already split into
@@ -297,6 +307,10 @@ requires explicit configuration to become visible.
 - **`@cpu`/`cpu_map()` require module-level picklable functions.** A
   constraint of `ProcessPoolExecutor`, not of this project — a lambda, a
   closure, or a bound method silently fail to be pickled.
+- **A `@cpu` pool crash can affect healthy sibling tasks.** See the
+  `@cpu` pool auto-recovery section above: `ProcessPoolExecutor` fails
+  every task still queued or in flight on the pool when one worker crashes
+  hard, not just the task that triggered the crash.
 
 ## Development
 

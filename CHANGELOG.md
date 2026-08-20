@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0rc2] - 2026-08-20
+
+### Fixed
+
+- **`DB_MAX_PENDING`/`CPU_MAX_PENDING` set explicitly to `0` was silently
+  ignored.** `get_db_semaphore()`/`get_cpu_semaphore()` computed the
+  backpressure limit with `app_settings.DB_MAX_PENDING or POOL_SIZE * 4`:
+  since `0` is falsy in Python, an explicit `0` fell back to the computed
+  default instead of being honored, unlike every other optional
+  `GOROUTINE` setting (which all use an explicit `is None` check). Now
+  `0` is respected like any other explicit value.
+- **CI jobs had no `timeout-minutes`.** A regression of the kind described
+  in the project's `fork`/`spawn` postmortem (a job stuck `in_progress`
+  with no error, no advancing log) would have run until GitHub Actions'
+  default 6-hour job timeout instead of failing fast. Every job in
+  `ci.yml` now caps at 10 minutes.
+
+### Documented
+
+- **`@cpu` pool crashes aren't fully isolated to the failing task.**
+  `ProcessPoolExecutor` marks every task still queued or in flight on a
+  pool as `Err(BrokenProcessPool(...))` when one worker crashes hard, not
+  only the task whose worker actually died — a healthy sibling `@cpu` task
+  running at the same moment can be collateral damage. This is a
+  `ProcessPoolExecutor` characteristic that `django-goroutine` cannot
+  isolate away without giving up a pool shared across calls; `@io`/`@db`
+  tasks are unaffected. Documented in the `@cpu` pool auto-recovery and
+  Known limitations sections of the README (previously undocumented
+  behavior, not a change in behavior).
+
 ## [1.0.0rc1] - 2026-08-15
 
 ### Added
@@ -100,5 +130,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   locks potentially held at fork time. See above (`spawn` context +
   `initializer`).
 
-[Unreleased]: https://github.com/alzeph/django-goroutine/compare/v1.0.0rc1...main
+[Unreleased]: https://github.com/alzeph/django-goroutine/compare/v1.0.0rc2...main
+[1.0.0rc2]: https://github.com/alzeph/django-goroutine/compare/v1.0.0rc1...v1.0.0rc2
 [1.0.0rc1]: https://github.com/alzeph/django-goroutine/commits/v1.0.0rc1

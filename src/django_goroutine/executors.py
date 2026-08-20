@@ -93,7 +93,9 @@ def get_cpu_executor() -> ProcessPoolExecutor:
 def get_db_semaphore() -> asyncio.Semaphore:
     global _db_semaphore
     if _db_semaphore is None:
-        limit = app_settings.DB_MAX_PENDING or app_settings.DB_POOL_SIZE * 4
+        limit = app_settings.DB_MAX_PENDING
+        if limit is None:
+            limit = app_settings.DB_POOL_SIZE * 4
         _db_semaphore = asyncio.Semaphore(limit)
     return _db_semaphore
 
@@ -101,7 +103,9 @@ def get_db_semaphore() -> asyncio.Semaphore:
 def get_cpu_semaphore() -> asyncio.Semaphore:
     global _cpu_semaphore
     if _cpu_semaphore is None:
-        limit = app_settings.CPU_MAX_PENDING or app_settings.CPU_POOL_SIZE * 4
+        limit = app_settings.CPU_MAX_PENDING
+        if limit is None:
+            limit = app_settings.CPU_POOL_SIZE * 4
         _cpu_semaphore = asyncio.Semaphore(limit)
     return _cpu_semaphore
 

@@ -9,6 +9,39 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+## [1.0.0rc2] - 2026-08-20
+
+### Fixed
+
+- **`DB_MAX_PENDING`/`CPU_MAX_PENDING` fixé explicitement à `0` était
+  silencieusement ignoré.** `get_db_semaphore()`/`get_cpu_semaphore()`
+  calculaient la limite de backpressure avec
+  `app_settings.DB_MAX_PENDING or POOL_SIZE * 4` : `0` étant faux en
+  Python, un `0` explicite retombait sur le défaut calculé au lieu d'être
+  respecté, contrairement à tous les autres réglages `GOROUTINE`
+  optionnels (qui utilisent tous un test explicite `is None`). `0` est
+  désormais respecté comme n'importe quelle autre valeur explicite.
+- **Les jobs CI n'avaient pas de `timeout-minutes`.** Une régression du
+  genre de celle décrite dans le retour d'expérience `fork`/`spawn` du
+  projet (un job bloqué `in_progress` sans jamais lever d'erreur ni faire
+  avancer les logs) aurait tourné jusqu'au timeout par défaut de GitHub
+  Actions (6 heures) au lieu d'échouer rapidement. Chaque job de `ci.yml`
+  est désormais plafonné à 10 minutes.
+
+### Documented
+
+- **Un crash du pool `@cpu` n'est pas totalement isolé à la tâche en
+  cause.** `ProcessPoolExecutor` marque comme `Err(BrokenProcessPool(...))`
+  toute tâche encore en file ou en cours sur un pool quand un worker
+  crashe durement, pas seulement la tâche dont le worker a réellement
+  crashé — une tâche `@cpu` sœur saine, en cours au même moment, peut
+  devenir un dégât collatéral. C'est une caractéristique de
+  `ProcessPoolExecutor` que `django-goroutine` ne peut pas isoler sans
+  renoncer à un pool partagé entre les appels ; les tâches `@io`/`@db` ne
+  sont pas concernées. Documenté dans les sections auto-récupération du
+  pool `@cpu` et Limitations connues du README (comportement déjà présent
+  et non documenté, pas un changement de comportement).
+
 ## [1.0.0rc1] - 2026-08-15
 
 ### Added
@@ -103,5 +136,6 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
   potentiellement tenus au moment du fork. Voir plus haut (contexte
   `spawn` + `initializer`).
 
-[Unreleased]: https://github.com/alzeph/django-goroutine/compare/v1.0.0rc1...main
+[Unreleased]: https://github.com/alzeph/django-goroutine/compare/v1.0.0rc2...main
+[1.0.0rc2]: https://github.com/alzeph/django-goroutine/compare/v1.0.0rc1...v1.0.0rc2
 [1.0.0rc1]: https://github.com/alzeph/django-goroutine/commits/v1.0.0rc1
